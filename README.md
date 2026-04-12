@@ -151,8 +151,8 @@ ssh user@server "tail -f /var/log/app.log" | log-explainer /dev/stdin \
   --model qwen2.5-coder:1.5b
 
 #you could simulate the same using 
-nohup python3 loadgen.py --output assets/sample.log --duration 300 --rate 2 & \
- ssh localhost "tail -f assets/sample.log" | log-explainer /dev/stdin
+nohup python3 loadgen.py --output /tmp/output.log --duration 300 --rate 2 & \
+ ssh localhost "tail -f /tmp/output.log" | log-explainer /dev/stdin
 ```
 
 ---
