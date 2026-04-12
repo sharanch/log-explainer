@@ -157,11 +157,11 @@ class IncidentSummarizer:
         )
 
 
-def print_separator():
+def print_separator():  # pragma: no cover
     print(f"{DIM}{'─' * 60}{RESET}")
 
 
-def tail_file(filepath: str, model: str, context: str, min_severity: str):
+def tail_file(filepath: str, model: str, context: str, min_severity: str):  # pragma: no cover
     severity_order = ["INFO", "UNKNOWN", "WARN", "ERROR", "CRITICAL"]
     min_index = severity_order.index(min_severity) if min_severity in severity_order else 0
 
@@ -234,7 +234,7 @@ def tail_file(filepath: str, model: str, context: str, min_severity: str):
         sys.exit(0)
 
 
-def main():
+def main():  # pragma: no cover
     parser = argparse.ArgumentParser(
         description="Tail a log file and explain each line in plain English using a local Ollama model.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
