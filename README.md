@@ -38,7 +38,7 @@ cd log-explainer
 pip install -r requirements.txt
 
 # 3. Pull a model
-ollama pull qwen2.5-coder
+ollama pull qwen2.5-coder:1.5b
 
 # 4. Run it
 python log_parser.py /var/log/myapp.log

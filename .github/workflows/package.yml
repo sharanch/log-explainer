@@ -1,0 +1,175 @@
+name: Package
+
+"on":
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-packages:
+    name: Build .deb and .rpm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install rpmbuild
+        run: sudo apt-get install -y rpm
+
+      - name: Build .deb
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          DEB_ROOT=pkg/deb/log-explainer_${VERSION}_all
+
+          mkdir -p ${DEB_ROOT}/DEBIAN
+          mkdir -p ${DEB_ROOT}/usr/bin
+          mkdir -p ${DEB_ROOT}/usr/lib/log-explainer
+
+          cp log_parser.py requirements.txt ${DEB_ROOT}/usr/lib/log-explainer/
+
+          cat > ${DEB_ROOT}/usr/bin/log-explainer << 'EOF'
+          #!/bin/bash
+          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
+          EOF
+          chmod +x ${DEB_ROOT}/usr/bin/log-explainer
+
+          cat > ${DEB_ROOT}/DEBIAN/control << EOF
+          Package: log-explainer
+          Version: ${VERSION}
+          Architecture: all
+          Maintainer: Sharan CH <me@sharanch.dev>
+          Depends: python3 (>= 3.12), python3-pip
+          Recommends: ollama
+          Description: Plain-English log analysis for on-call engineers
+           Tails a live log file and uses a local LLM (via Ollama) to explain
+           each line in plain English in real time. Features severity
+           classification, pattern spike detection, and incident summarization.
+           .
+           Ollama must be installed separately: https://ollama.com/download
+          EOF
+
+          cat > ${DEB_ROOT}/DEBIAN/postinst << 'EOF'
+          #!/bin/bash
+          set -e
+          pip3 install requests --break-system-packages --quiet 2>/dev/null || \
+            pip3 install requests --quiet 2>/dev/null || true
+          if ! command -v ollama &>/dev/null; then
+            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
+            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
+          fi
+          EOF
+          chmod 755 ${DEB_ROOT}/DEBIAN/postinst
+
+          dpkg-deb --build --root-owner-group ${DEB_ROOT}
+          echo "DEB_PATH=pkg/deb/log-explainer_${VERSION}_all.deb" >> $GITHUB_ENV
+
+      - name: Build .rpm
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mkdir -p /tmp/log-explainer-${VERSION}/usr/lib/log-explainer
+          mkdir -p /tmp/log-explainer-${VERSION}/usr/bin
+
+          cp log_parser.py requirements.txt \
+            /tmp/log-explainer-${VERSION}/usr/lib/log-explainer/
+
+          cat > /tmp/log-explainer-${VERSION}/usr/bin/log-explainer << 'EOF'
+          #!/bin/bash
+          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
+          EOF
+          chmod +x /tmp/log-explainer-${VERSION}/usr/bin/log-explainer
+
+          cd /tmp && tar czf \
+            $GITHUB_WORKSPACE/rpmbuild/SOURCES/log-explainer-${VERSION}.tar.gz \
+            log-explainer-${VERSION}/
+
+          cat > $GITHUB_WORKSPACE/rpmbuild/SPECS/log-explainer.spec << EOF
+          Name:           log-explainer
+          Version:        ${VERSION}
+          Release:        1%{?dist}
+          Summary:        Plain-English log analysis for on-call engineers
+          License:        MIT
+          URL:            https://github.com/%{?github_repository}
+          Source0:        %{name}-%{version}.tar.gz
+          BuildArch:      noarch
+          Requires:       python3 >= 3.12
+
+          %description
+          Tails a live log file and uses a local LLM (via Ollama) to explain each
+          line in plain English in real time. Features severity classification,
+          pattern spike detection, and incident summarization. No API keys needed.
+
+          Ollama must be installed separately: https://ollama.com/download
+
+          %prep
+          %autosetup
+
+          %install
+          mkdir -p %{buildroot}/usr/lib/log-explainer
+          mkdir -p %{buildroot}/usr/bin
+          install -m 644 usr/lib/log-explainer/log_parser.py   %{buildroot}/usr/lib/log-explainer/
+          install -m 644 usr/lib/log-explainer/requirements.txt %{buildroot}/usr/lib/log-explainer/
+          install -m 755 usr/bin/log-explainer                  %{buildroot}/usr/bin/log-explainer
+
+          %post
+          pip3 install requests --quiet 2>/dev/null || true
+          if ! command -v ollama &>/dev/null; then
+            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
+            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
+          fi
+
+          %files
+          /usr/bin/log-explainer
+          /usr/lib/log-explainer/log_parser.py
+          /usr/lib/log-explainer/requirements.txt
+
+          %changelog
+          * $(date '+%a %b %d %Y') Sharan CH <me@sharanch.dev> - ${VERSION}-1
+          - Release ${VERSION}
+          EOF
+
+          rpmbuild \
+            --define "_topdir $GITHUB_WORKSPACE/rpmbuild" \
+            -bb $GITHUB_WORKSPACE/rpmbuild/SPECS/log-explainer.spec
+
+          RPM_PATH=$(find $GITHUB_WORKSPACE/rpmbuild/RPMS -name "*.rpm")
+          echo "RPM_PATH=${RPM_PATH}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release and upload packages
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## Installation
+
+            **Debian / Ubuntu**
+            ```bash
+            sudo dpkg -i log-explainer_${{ steps.version.outputs.VERSION }}_all.deb
+            ```
+
+            **RHEL / Fedora / CentOS**
+            ```bash
+            sudo rpm -i log-explainer-${{ steps.version.outputs.VERSION }}-1.noarch.rpm
+            ```
+
+            **After install**
+            ```bash
+            # Local log file
+            log-explainer /var/log/app.log --model qwen2.5-coder:1.5b
+
+            # Remote via SSH
+            ssh user@server "tail -f /var/log/app.log" | log-explainer /dev/stdin --model qwen2.5-coder:1.5b
+            ```
+
+            Ollama must be running locally. Pull a model first: `ollama pull qwen2.5-coder:1.5b`
+          files: |
+            ${{ env.DEB_PATH }}
+            ${{ env.RPM_PATH }}
