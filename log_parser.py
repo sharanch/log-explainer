@@ -11,7 +11,7 @@ from collections import deque
 import os
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
-DEFAULT_MODEL = "qwen2.5-coder"
+DEFAULT_MODEL = "qwen2.5-coder:1.5b"
 
 SYSTEM_PROMPT_TEMPLATE = """You are an expert SRE and application log analyst{context_clause}.
 Explain log lines in plain English for an on-call engineer during an incident.

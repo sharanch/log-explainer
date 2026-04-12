@@ -15,3 +15,5 @@
 2024-03-15 10:01:12,000 CRITICAL FATAL: max connection retries exhausted, shutting down
 2026-04-12 10:01:02 CRITICAL FATAL: max retries exhausted
 2026-04-12 10:01:00 ERROR Connection refused to postgres:5432
+[200~2026-04-12 10:01:00 ERROR Connection refused to postgres:5432~
+[200~2026-04-12 10:01:00 ERROR Connection refused to postgres:5432~

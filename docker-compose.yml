@@ -11,7 +11,7 @@ services:
       - ${LOG_FILE_PATH:-./sample.log}:/logs/app.log:ro
     command: >
       /logs/app.log
-      --model ${OLLAMA_MODEL:-qwen2.5-coder}
+      --model ${OLLAMA_MODEL:-qwen2.5-coder:1.5b}
       --context "${APP_CONTEXT:-Python application}"
       --severity ${MIN_SEVERITY:-INFO}
     restart: "no"
