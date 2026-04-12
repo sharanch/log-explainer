@@ -50,7 +50,7 @@ Waiting for new log lines...
 ## You can test the tail using the following 
 
 ```bash
-nohup python3 scripts/loadgen.py --output /tmp/output.log --duration 300 --rate 2 & ssh localhost "tail -f /tmp/output.log" | log-explainer /dev/stdin
+ nohup python3 scripts/loadgen.py --output /tmp/output.log --duration 300 --rate 2 & ssh localhost "tail -f /tmp/output.log" | log-explainer /dev/stdin
 
 ```
 
@@ -62,7 +62,7 @@ nohup python3 scripts/loadgen.py --output /tmp/output.log --duration 300 --rate 
 | `--model` | `qwen2.5-coder:1.5b` | Ollama model to use |
 | `--context` | _(empty)_ | App description — improves explanation quality |
 | `--severity` | `INFO` | Minimum severity to display: `INFO`, `WARN`, `ERROR`, `CRITICAL` |
-
+nohup
 ---
 
 ## Common Invocations
