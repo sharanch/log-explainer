@@ -14,4 +14,4 @@ coverage.xml
 .pytest_cache/
 .ruff_cache/
 nohup.out
-sample.log
+assets/sample.log
