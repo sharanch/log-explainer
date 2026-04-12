@@ -1,0 +1,15 @@
+2024-03-15 10:00:01,123 INFO     Starting application on port 8000
+2024-03-15 10:00:02,456 INFO     Connected to PostgreSQL at postgres:5432
+2024-03-15 10:00:03,789 INFO     Redis cache initialized
+2024-03-15 10:01:00,001 INFO     GET /api/users 200 OK (45ms)
+2024-03-15 10:01:05,002 WARNING  Retrying database connection attempt 1
+2024-03-15 10:01:06,003 WARNING  Retrying database connection attempt 2
+2024-03-15 10:01:07,004 ERROR    Connection refused to postgres:5432
+2024-03-15 10:01:07,100 ERROR    Traceback (most recent call last):
+2024-03-15 10:01:07,101 ERROR      File "db.py", line 42, in connect
+2024-03-15 10:01:07,102 ERROR    psycopg2.OperationalError: could not connect to server
+2024-03-15 10:01:08,200 ERROR    Connection refused to postgres:5432
+2024-03-15 10:01:09,300 ERROR    Connection refused to postgres:5432
+2024-03-15 10:01:10,400 ERROR    Connection refused to postgres:5432
+2024-03-15 10:01:11,500 ERROR    Connection refused to postgres:5432
+2024-03-15 10:01:12,000 CRITICAL FATAL: max connection retries exhausted, shutting down
