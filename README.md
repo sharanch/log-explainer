@@ -19,7 +19,7 @@ A platform engineering observability tool that tails a live log file and uses a 
 - Fully local: no API keys, no data sent externally, runs entirely on your machine
 - Installable as a system package: `.deb` for Debian/Ubuntu, `.rpm` for RHEL/Fedora
 - Docker and docker-compose support
-- Load generator for testing (`loadgen.py`)
+- Load generator for testing (`scripts/loadgen.py`)
 
 ---
 
@@ -151,7 +151,7 @@ ssh user@server "tail -f /var/log/app.log" | log-explainer /dev/stdin \
   --model qwen2.5-coder:1.5b
 
 #you could simulate the same using 
-nohup python3 loadgen.py --output /tmp/output.log --duration 300 --rate 2 & \
+nohup python3 scripts/loadgen.py --output /tmp/output.log --duration 300 --rate 2 & \
  ssh localhost "tail -f /tmp/output.log" | log-explainer /dev/stdin
 ```
 
@@ -182,17 +182,17 @@ check PostgreSQL service health and verify network connectivity from the app hos
 
 ## Testing with the load generator
 
-`loadgen.py` appends realistic log lines to a file at a configurable rate. Use it to test log-explainer locally without a live application.
+`scripts/loadgen.py` appends realistic log lines to a file at a configurable rate. Use it to test log-explainer locally without a live application.
 
 ```bash
 # Default: append to sample.log for 5 seconds at 2 lines/sec
-python3 loadgen.py
+python3 scripts/loadgen.py
 
 # Custom output file and duration
-python3 loadgen.py --output /tmp/test.log --duration 30
+python3 scripts/loadgen.py --output /tmp/test.log --duration 30
 
 # Higher rate to trigger pattern spike and incident summary alerts
-python3 loadgen.py --rate 10 --duration 60
+python3 scripts/loadgen.py --rate 10 --duration 60
 ```
 
 The load generator draws from a pool of 100 log lines with the following weighted distribution:
@@ -211,13 +211,13 @@ To run a full demo with both terminals:
 log-explainer sample.log --model qwen2.5-coder:1.5b --severity WARN
 
 # Terminal 2: run the load generator
-python3 loadgen.py --duration 30 --rate 3
+python3 scripts/loadgen.py --duration 30 --rate 3
 ```
 
 To trigger the incident summary (10 errors in 120 seconds), use a higher rate:
 
 ```bash
-python3 loadgen.py --rate 10 --duration 30
+python3 scripts/loadgen.py --rate 10 --duration 30
 ```
 
 ---
