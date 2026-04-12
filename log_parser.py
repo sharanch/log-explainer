@@ -8,7 +8,9 @@ import re
 from datetime import datetime
 from collections import deque
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+import os
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 DEFAULT_MODEL = "qwen2.5-coder"
 
 SYSTEM_PROMPT_TEMPLATE = """You are an expert SRE and application log analyst{context_clause}.

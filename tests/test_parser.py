@@ -121,14 +121,14 @@ class TestExplainLogLine:
         mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 
-        result = explain_log_line("ERROR: Connection refused to postgres:5432", "llama3")
+        result = explain_log_line("ERROR: Connection refused to postgres:5432", "qwen2.5-coder")
         assert result == "The database connection was refused."
 
     @patch("log_parser.requests.post", side_effect=Exception("Connection error"))
     def test_handles_connection_error(self, mock_post):
-        result = explain_log_line("ERROR: something", "llama3")
+        result = explain_log_line("ERROR: something", "qwen2.5-coder")
         assert "[ERROR]" in result
 
     def test_empty_line_returns_empty(self):
-        result = explain_log_line("   ", "llama3")
+        result = explain_log_line("   ", "qwen2.5-coder")
         assert result == ""

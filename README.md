@@ -14,12 +14,12 @@
 Log Explainer tails a live log file and uses a local LLM (via [Ollama](https://ollama.com)) to explain each line in plain English — in real time. Built for SREs and developers during incident response, when you need to understand what's happening fast.
 
 **Features:**
--  **Plain-English explanations** — translates cryptic log lines into actionable descriptions
--  **Severity classification** — auto-tags `INFO / WARN / ERROR / CRITICAL`
--  **Pattern detection** — alerts when the same error repeats 5+ times in 60 seconds
--  **Incident summarization** — generates a 2-3 sentence incident summary when error spikes are detected
--  **Fully local** — runs on Ollama, no API keys, no data sent externally
--  **Docker + docker-compose** — one command to spin up the full stack
+- 🤖 **Plain-English explanations** — translates cryptic log lines into actionable descriptions
+- 🚦 **Severity classification** — auto-tags `INFO / WARN / ERROR / CRITICAL`
+- 🔁 **Pattern detection** — alerts when the same error repeats 5+ times in 60 seconds
+- 🚨 **Incident summarization** — generates a 2-3 sentence incident summary when error spikes are detected
+- 🔒 **Fully local** — runs on Ollama, no API keys, no data sent externally
+- 🐳 **Docker + docker-compose** — one command to spin up the full stack
 
 ---
 
@@ -49,13 +49,18 @@ python log_parser.py /var/log/myapp.log
 Spins up Ollama + Log Explainer together — no local install needed.
 
 ```bash
-# Set your log file path and run
-LOG_FILE_PATH=/var/log/myapp.log docker compose up
+# 1. Copy the example env file and set your log path (must be absolute)
+cp .env.example .env
+# Edit .env and set LOG_FILE_PATH=/absolute/path/to/your/app.log
+
+# 2. Start the stack
+docker compose up
 ```
 
 With options:
 
 ```bash
+# Or pass env vars inline (must use absolute path)
 LOG_FILE_PATH=/var/log/myapp.log \
 APP_CONTEXT="Django REST API with Postgres and Redis" \
 OLLAMA_MODEL=mistral \
@@ -72,7 +77,7 @@ docker run --rm -it \
   -v /var/log/myapp.log:/logs/app.log:ro \
   --network host \
   ghcr.io/sharanch/log-explainer:latest \
-  /logs/app.log --model llama3
+  /logs/app.log --model qwen2.5-coder
 ```
 
 ---
@@ -86,7 +91,7 @@ Arguments:
   logfile               Path to the log file to tail
 
 Options:
-  --model MODEL         Ollama model to use (default: llama3)
+  --model MODEL         Ollama model to use (default: qwen2.5-coder)
   --context CONTEXT     App description to improve explanations
                         e.g. "Django REST API with Postgres"
   --severity LEVEL      Minimum severity to display: INFO, WARN, ERROR, CRITICAL

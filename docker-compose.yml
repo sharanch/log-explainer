@@ -1,38 +1,12 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: log-explainer-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  pull-model:
-    image: ollama/ollama:latest
-    container_name: log-explainer-pull
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5-coder}"]
-    restart: "no"
-
   log-explainer:
     build: .
-    image: ghcr.io/${GITHUB_REPOSITORY:-your-username/log-explainer}:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-sharanch/log-explainer}:latest
     container_name: log-explainer
-    depends_on:
-      ollama:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - OLLAMA_URL=http://ollama:11434/api/generate
+      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
     volumes:
       - ${LOG_FILE_PATH:-./sample.log}:/logs/app.log:ro
     command: >
@@ -41,6 +15,3 @@ services:
       --context "${APP_CONTEXT:-Python application}"
       --severity ${MIN_SEVERITY:-INFO}
     restart: unless-stopped
-
-volumes:
-  ollama_data:
