@@ -39,6 +39,23 @@ BOLD  = "\033[1m"
 
 
 def classify_severity(line: str) -> str:
+    # First pass: look for an explicit severity word anywhere in the line.
+    # This avoids misclassifying lines like "WARNING ... lag=1500" as ERROR
+    # just because a pattern keyword appears later in the message body.
+    _EXPLICIT = {
+        "CRITICAL": ["CRITICAL", "FATAL", "PANIC"],
+        "ERROR":    ["ERROR"],
+        "WARN":     ["WARNING", "WARN"],
+        "INFO":     ["INFO"],
+    }
+    upper = line.upper()
+    for severity, keywords in _EXPLICIT.items():
+        for kw in keywords:
+            if kw in upper:
+                return severity
+
+    # Second pass: fall back to full pattern matching for lines with no
+    # explicit severity word (e.g. bare exception tracebacks, OOM messages)
     for severity, patterns in SEVERITY_PATTERNS.items():
         for pattern in patterns:
             if re.search(pattern, line):
@@ -204,7 +221,17 @@ def tail_file(filepath: str, model: str, context: str, min_severity: str):  # pr
                 color = SEVERITY_COLORS.get(severity, SEVERITY_COLORS["UNKNOWN"])
                 ts = datetime.now().strftime("%H:%M:%S")
 
-                print(f"{DIM}{ts}{RESET} {color}[{severity:<8}]{RESET} {line}")
+                # Strip leading timestamp from the raw line if present so we
+                # don't print two timestamps side by side. Handles formats:
+                #   2026-04-12 17:30:04,792 WARNING  message
+                #   2026-04-12T17:30:04 WARNING message
+                display_line = re.sub(
+                    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[,.]?\d*\s+",
+                    "",
+                    line,
+                )
+
+                print(f"{DIM}{ts}{RESET} {color}[{severity:<8}]{RESET} {display_line}")
 
                 # Pattern spike detection
                 repeat_count = detector.check(line)

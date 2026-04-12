@@ -15,3 +15,15 @@
 2024-03-15 10:01:12,000 CRITICAL FATAL: max connection retries exhausted, shutting down
 2026-04-12 10:01:02 CRITICAL FATAL: max retries exhausted
 2026-04-12 10:01:00 ERROR Connection refused to postgres:5432
+2026-04-12 11:57:46,093 WARNING  TLS certificate expires in 14 days, renewal required
+2026-04-12 11:57:46,344 INFO     Startup complete, ready to serve traffic
+2026-04-12 11:57:46,594 WARNING  Timeout waiting for lock on resource 'user:8821'
+2026-04-12 11:57:46,845 INFO     gRPC server started on port 50051
+2026-04-12 11:57:47,095 INFO     Rate limiter reset for IP 203.0.113.42
+2026-04-12 11:57:47,346 WARNING  Redis cache miss rate exceeded 30% in last 60s
+2026-04-12 11:57:47,597 INFO     Scheduled job 'cleanup_expired_tokens' started
+2026-04-12 11:57:47,848 CRITICAL segfault at address 0x00000000, core dumped
+2026-04-12 11:57:48,099 WARNING  Disk usage at 82% on /var/data, consider cleanup
+2026-04-12 11:57:48,351 WARNING  Slow query detected: SELECT * FROM events took 4100ms
+2026-04-12 11:57:48,602 ERROR    Unhandled exception in worker thread: ZeroDivisionError
+2026-04-12 11:57:48,852 INFO     PUT /api/users/42 200 OK (67ms)

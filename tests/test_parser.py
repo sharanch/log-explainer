@@ -27,8 +27,31 @@ class TestClassifySeverity:
         assert classify_severity("some random log line with no markers") == "UNKNOWN"
 
     def test_case_sensitivity(self):
-        assert classify_severity("error: something went wrong") == "UNKNOWN"  # lowercase not matched
+        # Explicit severity words are matched case-insensitively (upper() pass)
         assert classify_severity("ERROR: something went wrong") == "ERROR"
+        assert classify_severity("error: something went wrong") == "ERROR"
+        assert classify_severity("Warning: disk almost full") == "WARN"
+        # A line with no severity keyword at all should be UNKNOWN
+        assert classify_severity("something went wrong") == "UNKNOWN"
+
+    def test_explicit_severity_wins_over_pattern(self):
+        # A WARNING line that also contains a pattern keyword (e.g. "lag")
+        # should be classified as WARN, not ERROR
+        line = "2026-04-12 17:30:06 WARNING  Kafka consumer lag growing: topic=order-events lag=1500"
+        assert classify_severity(line) == "WARN"
+
+    def test_explicit_severity_wins_for_full_loadgen_line(self):
+        # Full loadgen-style line with timestamp prefix
+        line = "2026-04-12 17:30:04,792 WARNING  Auto-vacuum running on table 'orders', may cause slowdown"
+        assert classify_severity(line) == "WARN"
+
+    def test_fallback_pattern_for_bare_traceback(self):
+        # No explicit severity word — should fall back to pattern matching
+        assert classify_severity("Traceback (most recent call last):") == "ERROR"
+
+    def test_fallback_pattern_for_oom(self):
+        # OOMKilled has no explicit severity word — pattern match should catch it
+        assert classify_severity("OOMKilled: container exceeded memory limit") == "CRITICAL"
 
 
 # ── Pattern detector ─────────────────────────────────────────────────────────
