@@ -4,7 +4,6 @@ import sys
 import time
 import argparse
 import requests
-import json
 import re
 from datetime import datetime
 from collections import deque

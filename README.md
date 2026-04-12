@@ -2,8 +2,8 @@
 
 > Plain-English log analysis for on-call engineers. Powered by a local LLM — no API keys, no data leaving your machine.
 
-[![CI](https://github.com/sharanch/log-explainer/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/log-explainer/actions/workflows/ci.yml)
-[![Docker](https://github.com/sharanch/log-explainer/actions/workflows/docker.yml/badge.svg)](https://github.com/YOUR_USERNAME/log-explainer/actions/workflows/docker.yml)
+[![CI](https://github.com/sharanch/log-explainer/actions/workflows/ci.yml/badge.svg)](https://github.com/sharanch/log-explainer/actions/workflows/ci.yml)
+[![Docker](https://github.com/sharanch/log-explainer/actions/workflows/docker.yml/badge.svg)](https://github.com/sharanch/log-explainer/actions/workflows/docker.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -14,12 +14,12 @@
 Log Explainer tails a live log file and uses a local LLM (via [Ollama](https://ollama.com)) to explain each line in plain English — in real time. Built for SREs and developers during incident response, when you need to understand what's happening fast.
 
 **Features:**
-- 🤖 **Plain-English explanations** — translates cryptic log lines into actionable descriptions
-- 🚦 **Severity classification** — auto-tags `INFO / WARN / ERROR / CRITICAL`
-- 🔁 **Pattern detection** — alerts when the same error repeats 5+ times in 60 seconds
-- 🚨 **Incident summarization** — generates a 2-3 sentence incident summary when error spikes are detected
-- 🔒 **Fully local** — runs on Ollama, no API keys, no data sent externally
-- 🐳 **Docker + docker-compose** — one command to spin up the full stack
+-  **Plain-English explanations** — translates cryptic log lines into actionable descriptions
+-  **Severity classification** — auto-tags `INFO / WARN / ERROR / CRITICAL`
+-  **Pattern detection** — alerts when the same error repeats 5+ times in 60 seconds
+-  **Incident summarization** — generates a 2-3 sentence incident summary when error spikes are detected
+-  **Fully local** — runs on Ollama, no API keys, no data sent externally
+-  **Docker + docker-compose** — one command to spin up the full stack
 
 ---
 

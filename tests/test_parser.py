@@ -1,5 +1,3 @@
-import pytest
-import time
 from unittest.mock import patch, MagicMock
 from log_parser import classify_severity, PatternDetector, IncidentSummarizer, explain_log_line
 
