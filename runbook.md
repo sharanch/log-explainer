@@ -47,6 +47,14 @@ Waiting for new log lines...
 
 ---
 
+## You can test the tail using the following 
+
+```bash
+nohup python3 loadgen.py --output /tmp/test.log --duration 300 --rate 2 & ssh localhost "tail -f /tmp/test.log" | log-explainer /dev/stdin
+
+```
+
+
 ## Options
 
 | Flag | Default | Description |
