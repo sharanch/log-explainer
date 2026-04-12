@@ -117,7 +117,7 @@ class TestExplainLogLine:
     @patch("log_parser.requests.post")
     def test_returns_explanation(self, mock_post):
         mock_response = MagicMock()
-        mock_response.json.return_value = {"response": "The database connection was refused."}
+        mock_response.json.return_value = {"message": {"content": "The database connection was refused."}}
         mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 

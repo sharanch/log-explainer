@@ -6,7 +6,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+      - OLLAMA_URL=http://host.docker.internal:11434/api/chat
     volumes:
       - ${LOG_FILE_PATH:-./sample.log}:/logs/app.log:ro
     command: >

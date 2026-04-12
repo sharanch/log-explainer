@@ -10,7 +10,7 @@ from collections import deque
 
 import os
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
 DEFAULT_MODEL = "qwen2.5-coder"
 
 SYSTEM_PROMPT_TEMPLATE = """You are an expert SRE and application log analyst{context_clause}.
@@ -56,15 +56,17 @@ def explain_log_line(line: str, model: str, context: str = "") -> str:
 
     payload = {
         "model": model,
-        "prompt": f"Explain this application log line in plain English:\n\n{line}",
-        "system": system_prompt,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Explain this application log line in plain English:\n\n{line}"}
+        ],
         "stream": False,
     }
 
     try:
         response = requests.post(OLLAMA_URL, json=payload, timeout=30)
         response.raise_for_status()
-        return response.json().get("response", "").strip()
+        return response.json().get("message", {}).get("content", "").strip()
     except requests.exceptions.ConnectionError:
         return "[ERROR] Cannot connect to Ollama. Is it running? Try: ollama serve"
     except requests.exceptions.Timeout:
