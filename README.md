@@ -268,6 +268,8 @@ Docker images are tagged automatically: `latest`, branch name, `sha-<short>`, an
 
 ---
 
+Demo: https://github.com/sharanch/log-explainer/assets/Demo.mp4
+
 ## License
 
 MIT
