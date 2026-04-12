@@ -134,11 +134,10 @@ class IncidentSummarizer:
             self.error_times.append(now)
             self.error_lines.append(line.strip())
 
-            # Evict old
+            # Evict old entries — pop from both deques together to stay in sync
             while self.error_times and self.error_times[0] < now - self.window_seconds:
                 self.error_times.popleft()
-                if self.error_lines:
-                    self.error_lines.popleft()
+                self.error_lines.popleft()
 
     def should_summarize(self) -> bool:
         now = time.time()
@@ -180,7 +179,10 @@ def tail_file(filepath: str, model: str, context: str, min_severity: str):
 
     try:
         with open(filepath, "r") as f:
-            f.seek(0, 2)  # seek to end
+            # Only seek to end for regular files. stdin/pipes are not seekable
+            # and already start at the current position — seeking would drop input.
+            if f.seekable():
+                f.seek(0, 2)
 
             while True:
                 line = f.readline()

@@ -1,3 +1,4 @@
+import time
 from unittest.mock import patch, MagicMock
 from log_parser import classify_severity, PatternDetector, IncidentSummarizer, explain_log_line
 
@@ -35,9 +36,10 @@ class TestClassifySeverity:
 class TestPatternDetector:
     def test_no_alert_below_threshold(self):
         detector = PatternDetector(window_seconds=60, threshold=5)
+        # Check every iteration — none should fire before threshold
         for _ in range(4):
             result = detector.check("ERROR: DB connection failed at 12:00:01")
-        assert result is None
+            assert result is None
 
     def test_alert_at_threshold(self):
         detector = PatternDetector(window_seconds=60, threshold=5)
@@ -47,6 +49,8 @@ class TestPatternDetector:
         assert result == 5
 
     def test_alert_fires_once(self):
+        # After the first alert the key is in self.alerted, so subsequent calls
+        # return None until count drops back below threshold and resets.
         detector = PatternDetector(window_seconds=60, threshold=3)
         alerts = []
         for _ in range(6):
@@ -74,6 +78,27 @@ class TestPatternDetector:
             result = detector.check(line)
         assert result == 3
 
+    def test_window_eviction_resets_alert(self):
+        # Entries older than window_seconds should be evicted, dropping count
+        # below threshold and clearing the alert so it can fire again.
+        detector = PatternDetector(window_seconds=1, threshold=3)
+
+        # Fire the alert
+        for _ in range(3):
+            detector.check("ERROR: disk full")
+
+        # Wait for the window to expire
+        time.sleep(1.1)
+
+        # Push count back up — should alert again after eviction
+        results = []
+        for _ in range(3):
+            r = detector.check("ERROR: disk full")
+            if r:
+                results.append(r)
+
+        assert len(results) == 1
+
 
 # ── Incident summarizer ───────────────────────────────────────────────────────
 
@@ -95,7 +120,7 @@ class TestIncidentSummarizer:
         for _ in range(3):
             s.record("ERROR: crash", "ERROR")
         assert s.should_summarize()
-        assert not s.should_summarize()  # second call should be blocked
+        assert not s.should_summarize()  # second call within window_seconds should be blocked
 
     def test_ignores_non_errors(self):
         s = IncidentSummarizer(window_seconds=120, spike_threshold=3)
@@ -109,6 +134,21 @@ class TestIncidentSummarizer:
         s.record("ERROR: DB connection refused", "ERROR")
         prompt = s.get_summary_prompt()
         assert "DB connection refused" in prompt
+
+    def test_deques_stay_in_sync_after_eviction(self):
+        # After window expiry, error_times and error_lines must stay the same
+        # length — they are always evicted together.
+        s = IncidentSummarizer(window_seconds=1, spike_threshold=99)
+        for _ in range(5):
+            s.record("ERROR: something", "ERROR")
+
+        time.sleep(1.1)
+
+        # Trigger eviction by recording a new entry
+        s.record("ERROR: new", "ERROR")
+
+        assert len(s.error_times) == len(s.error_lines)
+        assert len(s.error_times) == 1  # only the new entry survives
 
 
 # ── Ollama integration (mocked) ───────────────────────────────────────────────
@@ -125,9 +165,23 @@ class TestExplainLogLine:
         assert result == "The database connection was refused."
 
     @patch("log_parser.requests.post", side_effect=Exception("Connection error"))
-    def test_handles_connection_error(self, mock_post):
+    def test_handles_generic_exception(self, mock_post):
         result = explain_log_line("ERROR: something", "qwen2.5-coder")
         assert "[ERROR]" in result
+
+    @patch("log_parser.requests.post")
+    def test_handles_connection_error(self, mock_post):
+        import requests as req
+        mock_post.side_effect = req.exceptions.ConnectionError()
+        result = explain_log_line("ERROR: something", "qwen2.5-coder")
+        assert "ollama" in result.lower() or "[ERROR]" in result
+
+    @patch("log_parser.requests.post")
+    def test_handles_timeout(self, mock_post):
+        import requests as req
+        mock_post.side_effect = req.exceptions.Timeout()
+        result = explain_log_line("ERROR: something", "qwen2.5-coder")
+        assert "timed out" in result.lower() or "[ERROR]" in result
 
     def test_empty_line_returns_empty(self):
         result = explain_log_line("   ", "qwen2.5-coder")

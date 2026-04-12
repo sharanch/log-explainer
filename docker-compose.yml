@@ -14,4 +14,4 @@ services:
       --model ${OLLAMA_MODEL:-qwen2.5-coder}
       --context "${APP_CONTEXT:-Python application}"
       --severity ${MIN_SEVERITY:-INFO}
-    restart: unless-stopped
+    restart: "no"

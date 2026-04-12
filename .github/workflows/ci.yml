@@ -31,7 +31,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          PYTHONPATH=. pytest tests/ -v --cov=log_parser --cov-report=term-missing --cov-report=xml
+          PYTHONPATH=. pytest tests/ -v --cov=log_parser --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
