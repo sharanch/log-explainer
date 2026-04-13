@@ -314,7 +314,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
-          path: pkg/windows/log-explainer-${{ steps.version.outputs.VERSION }}.msi
+          path: pkg/windows/log-explainer-${{ steps.version.outputs.VERSION }}.msi --accept-eula
 
   # ── Release: attach all packages ────────────────────────────────────────────
   release:
