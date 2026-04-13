@@ -225,7 +225,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Install WiX Toolset
-        run: dotnet tool install --global wix
+        run: dotnet tool install --global wix --accept-eula
 
       - name: Stage payload
         shell: bash
@@ -308,13 +308,13 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           cd pkg/windows
-          wix build log-explainer.wxs -o log-explainer-${VERSION}.msi
+          wix build log-explainer.wxs -o log-explainer-${VERSION}.msi --accept-eula
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
-          path: pkg/windows/log-explainer-${{ steps.version.outputs.VERSION }}.msi --accept-eula
+          path: pkg/windows/log-explainer-${{ steps.version.outputs.VERSION }}.msi
 
   # ── Release: attach all packages ────────────────────────────────────────────
   release:
