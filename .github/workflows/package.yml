@@ -1,4 +1,376 @@
-Run VERSION=1.0.6
-wix.exe : error WIX0118: Additional argument '--accept-eula' was unexpected. Remove the argument and add the '-?' switch for more information.
-wix.exe : error WIX7015: You must accept the Open Source Maintenance Fee (OSMF) EULA to use WiX Toolset v7. For instructions, see https://wixtoolset.org/osmf/
-Error: Process completed with exit code 1.
+name: Package
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+
+  # ── Linux: .deb + .rpm ──────────────────────────────────────────────────────
+  build-linux:
+    name: Build .deb and .rpm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install rpmbuild
+        run: sudo apt-get install -y rpm
+
+      - name: Build .deb
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          DEB_ROOT=pkg/deb/log-explainer_${VERSION}_all
+
+          mkdir -p ${DEB_ROOT}/DEBIAN
+          mkdir -p ${DEB_ROOT}/usr/bin
+          mkdir -p ${DEB_ROOT}/usr/lib/log-explainer
+
+          cp log_parser.py requirements.txt ${DEB_ROOT}/usr/lib/log-explainer/
+
+          cat > ${DEB_ROOT}/usr/bin/log-explainer << 'EOF'
+          #!/bin/bash
+          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
+          EOF
+          chmod +x ${DEB_ROOT}/usr/bin/log-explainer
+
+          cat > ${DEB_ROOT}/DEBIAN/control << EOF
+          Package: log-explainer
+          Version: ${VERSION}
+          Architecture: all
+          Maintainer: Sharan CH <me@sharanch.dev>
+          Depends: python3 (>= 3.12), python3-pip
+          Recommends: ollama
+          Description: Plain-English log analysis for on-call engineers
+           Tails a live log file and uses a local LLM (via Ollama) to explain
+           each line in plain English in real time. Features severity
+           classification, pattern spike detection, and incident summarization.
+           .
+           Ollama must be installed separately: https://ollama.com/download
+          EOF
+
+          cat > ${DEB_ROOT}/DEBIAN/postinst << 'EOF'
+          #!/bin/bash
+          set -e
+          pip3 install requests --break-system-packages --quiet 2>/dev/null || \
+            pip3 install requests --quiet 2>/dev/null || true
+          if ! command -v ollama &>/dev/null; then
+            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
+            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
+          fi
+          EOF
+          chmod 755 ${DEB_ROOT}/DEBIAN/postinst
+
+          dpkg-deb --build --root-owner-group ${DEB_ROOT}
+
+      - name: Build .rpm
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          mkdir -p rpmbuild/BUILD rpmbuild/RPMS rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS
+          mkdir -p /tmp/log-explainer-${VERSION}/usr/lib/log-explainer
+          mkdir -p /tmp/log-explainer-${VERSION}/usr/bin
+
+          cp log_parser.py requirements.txt \
+            /tmp/log-explainer-${VERSION}/usr/lib/log-explainer/
+
+          cat > /tmp/log-explainer-${VERSION}/usr/bin/log-explainer << 'EOF'
+          #!/bin/bash
+          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
+          EOF
+          chmod +x /tmp/log-explainer-${VERSION}/usr/bin/log-explainer
+
+          cd /tmp && tar czf \
+            $GITHUB_WORKSPACE/rpmbuild/SOURCES/log-explainer-${VERSION}.tar.gz \
+            log-explainer-${VERSION}/
+
+          cat > $GITHUB_WORKSPACE/rpmbuild/SPECS/log-explainer.spec << EOF
+          Name:           log-explainer
+          Version:        ${VERSION}
+          Release:        1%{?dist}
+          Summary:        Plain-English log analysis for on-call engineers
+          License:        MIT
+          URL:            https://github.com/${{ github.repository }}
+          Source0:        %{name}-%{version}.tar.gz
+          BuildArch:      noarch
+          Requires:       python3 >= 3.12
+
+          %description
+          Tails a live log file and uses a local LLM (via Ollama) to explain each
+          line in plain English in real time. Features severity classification,
+          pattern spike detection, and incident summarization. No API keys needed.
+
+          Ollama must be installed separately: https://ollama.com/download
+
+          %prep
+          %autosetup
+
+          %install
+          mkdir -p %{buildroot}/usr/lib/log-explainer
+          mkdir -p %{buildroot}/usr/bin
+          install -m 644 usr/lib/log-explainer/log_parser.py   %{buildroot}/usr/lib/log-explainer/
+          install -m 644 usr/lib/log-explainer/requirements.txt %{buildroot}/usr/lib/log-explainer/
+          install -m 755 usr/bin/log-explainer                  %{buildroot}/usr/bin/log-explainer
+
+          %post
+          pip3 install requests --quiet 2>/dev/null || true
+          if ! command -v ollama &>/dev/null; then
+            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
+            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
+          fi
+
+          %files
+          /usr/bin/log-explainer
+          /usr/lib/log-explainer/log_parser.py
+          /usr/lib/log-explainer/requirements.txt
+
+          %changelog
+          * $(date '+%a %b %d %Y') Sharan CH <me@sharanch.dev> - ${VERSION}-1
+          - Release ${VERSION}
+          EOF
+
+          rpmbuild \
+            --define "_topdir $GITHUB_WORKSPACE/rpmbuild" \
+            -bb $GITHUB_WORKSPACE/rpmbuild/SPECS/log-explainer.spec
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            pkg/deb/log-explainer_${{ steps.version.outputs.VERSION }}_all.deb
+            rpmbuild/RPMS/noarch/log-explainer-${{ steps.version.outputs.VERSION }}-1.noarch.rpm
+
+  # ── macOS: .pkg ─────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build .pkg
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build .pkg
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          PAYLOAD=pkg/macos/payload
+
+          mkdir -p ${PAYLOAD}/usr/local/lib/log-explainer
+          mkdir -p ${PAYLOAD}/usr/local/bin
+
+          cp log_parser.py requirements.txt ${PAYLOAD}/usr/local/lib/log-explainer/
+
+          cat > ${PAYLOAD}/usr/local/bin/log-explainer << 'EOF'
+          #!/bin/bash
+          exec python3 /usr/local/lib/log-explainer/log_parser.py "$@"
+          EOF
+          chmod +x ${PAYLOAD}/usr/local/bin/log-explainer
+
+          mkdir -p pkg/macos/scripts
+          cat > pkg/macos/scripts/postinstall << 'EOF'
+          #!/bin/bash
+          set -e
+          pip3 install requests --quiet 2>/dev/null || \
+            pip3 install requests --break-system-packages --quiet 2>/dev/null || true
+          if ! command -v ollama &>/dev/null; then
+            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
+            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
+          fi
+          EOF
+          chmod +x pkg/macos/scripts/postinstall
+
+          pkgbuild \
+            --root ${PAYLOAD} \
+            --identifier dev.sharanch.log-explainer \
+            --version ${VERSION} \
+            --scripts pkg/macos/scripts \
+            --install-location / \
+            pkg/macos/log-explainer-component.pkg
+
+          productbuild \
+            --package pkg/macos/log-explainer-component.pkg \
+            pkg/macos/log-explainer-${VERSION}.pkg
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: pkg/macos/log-explainer-${{ steps.version.outputs.VERSION }}.pkg
+
+  # ── Windows: .msi ───────────────────────────────────────────────────────────
+  build-windows:
+    name: Build .msi
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install WiX Toolset v3
+        # Use WiX v3 via chocolatey — stable on GitHub runners, no EULA requirement
+        run: choco install wixtoolset --version 3.11.2 -y --no-progress
+
+      - name: Stage payload
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p pkg/windows/payload
+          cp log_parser.py requirements.txt pkg/windows/payload/
+
+          cat > pkg/windows/payload/log-explainer.cmd << 'EOF'
+          @echo off
+          python "%~dp0log_parser.py" %*
+          EOF
+
+      - name: Write WiX source
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          # WiX requires a 4-part version: major.minor.patch.0
+          WIX_VERSION="${VERSION}.0"
+
+          cat > pkg/windows/log-explainer.wxs << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product
+              Id="*"
+              Name="Log Explainer"
+              Version="${WIX_VERSION}"
+              Manufacturer="Sharan CH"
+              UpgradeCode="4A8B3C2D-1E5F-6A7B-8C9D-0E1F2A3B4C5D"
+              Language="1033"
+              Codepage="1252">
+
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+
+              <Feature Id="Main" Level="1">
+                <ComponentGroupRef Id="AppFiles" />
+                <ComponentGroupRef Id="PathEnvVar" />
+              </Feature>
+
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFilesFolder">
+                  <Directory Id="INSTALLFOLDER" Name="log-explainer" />
+                </Directory>
+              </Directory>
+
+              <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+                <Component Id="LogParser" Guid="1A2B3C4D-5E6F-7A8B-9C0D-1E2F3A4B5C6D">
+                  <File Source="pkg/windows/payload/log_parser.py" />
+                </Component>
+                <Component Id="Requirements" Guid="2B3C4D5E-6F7A-8B9C-0D1E-2F3A4B5C6D7E">
+                  <File Source="pkg/windows/payload/requirements.txt" />
+                </Component>
+                <Component Id="Launcher" Guid="3C4D5E6F-7A8B-9C0D-1E2F-3A4B5C6D7E8F">
+                  <File Source="pkg/windows/payload/log-explainer.cmd" />
+                </Component>
+              </ComponentGroup>
+
+              <ComponentGroup Id="PathEnvVar" Directory="INSTALLFOLDER">
+                <Component Id="PathComponent" Guid="5D6E7F8A-9B0C-1D2E-3F4A-5B6C7D8E9F0A">
+                  <Environment
+                    Id="PATH"
+                    Name="PATH"
+                    Value="[INSTALLFOLDER]"
+                    Permanent="no"
+                    Part="last"
+                    Action="set"
+                    System="yes" />
+                </Component>
+              </ComponentGroup>
+
+            </Product>
+          </Wix>
+          EOF
+
+      - name: Build .msi
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          WIX_PATH="C:/Program Files (x86)/WiX Toolset v3.11/bin"
+          "${WIX_PATH}/candle.exe" pkg/windows/log-explainer.wxs             -out pkg/windows/log-explainer.wixobj
+          "${WIX_PATH}/light.exe" pkg/windows/log-explainer.wixobj             -out pkg/windows/log-explainer-${VERSION}.msi
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: pkg/windows/log-explainer-${{ steps.version.outputs.VERSION }}.msi
+
+  # ── Release: attach all packages ────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos, build-windows]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Create release and upload packages
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## Installation
+
+            **Debian / Ubuntu**
+            ```bash
+            sudo dpkg -i log-explainer_${{ steps.version.outputs.VERSION }}_all.deb
+            ```
+
+            **RHEL / Fedora / CentOS**
+            ```bash
+            sudo rpm -i log-explainer-${{ steps.version.outputs.VERSION }}-1.noarch.rpm
+            ```
+
+            **macOS**
+            ```
+            Open log-explainer-${{ steps.version.outputs.VERSION }}.pkg and follow the installer.
+            ```
+
+            **Windows**
+            ```
+            Run log-explainer-${{ steps.version.outputs.VERSION }}.msi and follow the installer.
+            ```
+
+            **After install**
+            ```bash
+            # Local log file
+            log-explainer /var/log/app.log --model qwen2.5-coder:1.5b
+
+            # Remote via SSH (Linux/macOS)
+            ssh user@server "tail -f /var/log/app.log" | log-explainer /dev/stdin --model qwen2.5-coder:1.5b
+            ```
+
+            Ollama must be running locally. Pull a model first: `ollama pull qwen2.5-coder:1.5b`
+          files: |
+            dist/linux-packages/log-explainer_${{ steps.version.outputs.VERSION }}_all.deb
+            dist/linux-packages/log-explainer-${{ steps.version.outputs.VERSION }}-1.noarch.rpm
+            dist/macos-package/log-explainer-${{ steps.version.outputs.VERSION }}.pkg
+            dist/windows-package/log-explainer-${{ steps.version.outputs.VERSION }}.msi
