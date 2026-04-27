@@ -34,10 +34,8 @@ jobs:
 
           cp log_parser.py requirements.txt ${DEB_ROOT}/usr/lib/log-explainer/
 
-          cat > ${DEB_ROOT}/usr/bin/log-explainer << 'EOF'
-          #!/bin/bash
-          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
-          EOF
+          printf '#!/bin/bash\nexec python3 /usr/lib/log-explainer/log_parser.py "$@"\n' \
+            > ${DEB_ROOT}/usr/bin/log-explainer
           chmod +x ${DEB_ROOT}/usr/bin/log-explainer
 
           cat > ${DEB_ROOT}/DEBIAN/control << EOF
@@ -55,16 +53,8 @@ jobs:
            Ollama must be installed separately: https://ollama.com/download
           EOF
 
-          cat > ${DEB_ROOT}/DEBIAN/postinst << 'EOF'
-          #!/bin/bash
-          set -e
-          pip3 install requests --break-system-packages --quiet 2>/dev/null || \
-            pip3 install requests --quiet 2>/dev/null || true
-          if ! command -v ollama &>/dev/null; then
-            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
-            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
-          fi
-          EOF
+          printf '#!/bin/bash\nset -e\npip3 install requests --break-system-packages --quiet 2>/dev/null || pip3 install requests --quiet 2>/dev/null || true\nif ! command -v ollama &>/dev/null; then\n  echo "NOTE: Ollama not installed. See https://ollama.com/download"\nfi\n' \
+            > ${DEB_ROOT}/DEBIAN/postinst
           chmod 755 ${DEB_ROOT}/DEBIAN/postinst
 
           dpkg-deb --build --root-owner-group ${DEB_ROOT}
@@ -80,10 +70,8 @@ jobs:
           cp log_parser.py requirements.txt \
             /tmp/log-explainer-${VERSION}/usr/lib/log-explainer/
 
-          cat > /tmp/log-explainer-${VERSION}/usr/bin/log-explainer << 'EOF'
-          #!/bin/bash
-          exec python3 /usr/lib/log-explainer/log_parser.py "$@"
-          EOF
+          printf '#!/bin/bash\nexec python3 /usr/lib/log-explainer/log_parser.py "$@"\n' \
+            > /tmp/log-explainer-${VERSION}/usr/bin/log-explainer
           chmod +x /tmp/log-explainer-${VERSION}/usr/bin/log-explainer
 
           cd /tmp && tar czf \
@@ -103,10 +91,7 @@ jobs:
 
           %description
           Tails a live log file and uses a local LLM (via Ollama) to explain each
-          line in plain English in real time. Features severity classification,
-          pattern spike detection, and incident summarization. No API keys needed.
-
-          Ollama must be installed separately: https://ollama.com/download
+          line in plain English in real time. No API keys needed.
 
           %prep
           %autosetup
@@ -120,10 +105,6 @@ jobs:
 
           %post
           pip3 install requests --quiet 2>/dev/null || true
-          if ! command -v ollama &>/dev/null; then
-            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
-            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
-          fi
 
           %files
           /usr/bin/log-explainer
@@ -167,26 +148,16 @@ jobs:
 
           mkdir -p ${PAYLOAD}/usr/local/lib/log-explainer
           mkdir -p ${PAYLOAD}/usr/local/bin
+          mkdir -p pkg/macos/scripts
 
           cp log_parser.py requirements.txt ${PAYLOAD}/usr/local/lib/log-explainer/
 
-          cat > ${PAYLOAD}/usr/local/bin/log-explainer << 'EOF'
-          #!/bin/bash
-          exec python3 /usr/local/lib/log-explainer/log_parser.py "$@"
-          EOF
+          printf '#!/bin/bash\nexec python3 /usr/local/lib/log-explainer/log_parser.py "$@"\n' \
+            > ${PAYLOAD}/usr/local/bin/log-explainer
           chmod +x ${PAYLOAD}/usr/local/bin/log-explainer
 
-          mkdir -p pkg/macos/scripts
-          cat > pkg/macos/scripts/postinstall << 'EOF'
-          #!/bin/bash
-          set -e
-          pip3 install requests --quiet 2>/dev/null || \
-            pip3 install requests --break-system-packages --quiet 2>/dev/null || true
-          if ! command -v ollama &>/dev/null; then
-            echo "NOTE: Ollama is not installed. Install from https://ollama.com/download"
-            echo "      Then pull a model: ollama pull qwen2.5-coder:1.5b"
-          fi
-          EOF
+          printf '#!/bin/bash\nset -e\npip3 install requests --quiet 2>/dev/null || pip3 install requests --break-system-packages --quiet 2>/dev/null || true\nif ! command -v ollama &>/dev/null; then\n  echo "NOTE: Ollama not installed. See https://ollama.com/download"\nfi\n' \
+            > pkg/macos/scripts/postinstall
           chmod +x pkg/macos/scripts/postinstall
 
           pkgbuild \
@@ -222,39 +193,34 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Find WiX Toolset
-        # WiX v3 is pre-installed on windows-latest — just locate it
-        shell: bash
+        shell: pwsh
         run: |
-          WIX_BIN=$(find "C:/Program Files (x86)/WiX Toolset"* -name "candle.exe" 2>/dev/null | head -1 | xargs dirname)
-          echo "WIX_BIN=${WIX_BIN}" >> $GITHUB_ENV
-          echo "Found WiX at: ${WIX_BIN}"
+          $candle = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*\bin\candle.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $candle) { throw "candle.exe not found — WiX Toolset is not installed" }
+          $wixBin = $candle.DirectoryName
+          Write-Output "Found WiX at: $wixBin"
+          Add-Content -Path $env:GITHUB_ENV -Value "WIX_BIN=$wixBin"
 
       - name: Stage payload
         shell: bash
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
           mkdir -p pkg/windows/payload
           cp log_parser.py requirements.txt pkg/windows/payload/
-
-          cat > pkg/windows/payload/log-explainer.cmd << 'EOF'
-          @echo off
-          python "%~dp0log_parser.py" %*
-          EOF
+          printf '@echo off\npython "%%~dp0log_parser.py" %%*\n' \
+            > pkg/windows/payload/log-explainer.cmd
 
       - name: Write WiX source
         shell: bash
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          # WiX requires a 4-part version: major.minor.patch.0
-          WIX_VERSION="${VERSION}.0"
-
+          mkdir -p pkg/windows
           cat > pkg/windows/log-explainer.wxs << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product
               Id="*"
               Name="Log Explainer"
-              Version="${WIX_VERSION}"
+              Version="${VERSION}.0"
               Manufacturer="Sharan CH"
               UpgradeCode="4A8B3C2D-1E5F-6A7B-8C9D-0E1F2A3B4C5D"
               Language="1033"
@@ -305,11 +271,14 @@ jobs:
           EOF
 
       - name: Build .msi
-        shell: bash
+        shell: pwsh
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-          "${WIX_BIN}/candle.exe" pkg/windows/log-explainer.wxs             -out pkg/windows/log-explainer.wixobj
-          "${WIX_BIN}/light.exe" pkg/windows/log-explainer.wixobj             -out pkg/windows/log-explainer-${VERSION}.msi
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $wixBin  = $env:WIX_BIN
+          & "$wixBin\candle.exe" pkg/windows/log-explainer.wxs -out pkg/windows/log-explainer.wixobj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$wixBin\light.exe" pkg/windows/log-explainer.wixobj -out "pkg/windows/log-explainer-$version.msi"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
@@ -353,21 +322,15 @@ jobs:
             ```
 
             **macOS**
-            ```
-            Open log-explainer-${{ steps.version.outputs.VERSION }}.pkg and follow the installer.
-            ```
+            Open `log-explainer-${{ steps.version.outputs.VERSION }}.pkg` and follow the installer.
 
             **Windows**
-            ```
-            Run log-explainer-${{ steps.version.outputs.VERSION }}.msi and follow the installer.
-            ```
+            Run `log-explainer-${{ steps.version.outputs.VERSION }}.msi` and follow the installer.
 
             **After install**
             ```bash
-            # Local log file
             log-explainer /var/log/app.log --model qwen2.5-coder:1.5b
 
-            # Remote via SSH (Linux/macOS)
             ssh user@server "tail -f /var/log/app.log" | log-explainer /dev/stdin --model qwen2.5-coder:1.5b
             ```
 
