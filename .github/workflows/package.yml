@@ -221,9 +221,13 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Install WiX Toolset v3
-        # Use WiX v3 via chocolatey — stable on GitHub runners, no EULA requirement
-        run: choco install wixtoolset --version 3.11.2 -y --no-progress
+      - name: Find WiX Toolset
+        # WiX v3 is pre-installed on windows-latest — just locate it
+        shell: bash
+        run: |
+          WIX_BIN=$(find "C:/Program Files (x86)/WiX Toolset"* -name "candle.exe" 2>/dev/null | head -1 | xargs dirname)
+          echo "WIX_BIN=${WIX_BIN}" >> $GITHUB_ENV
+          echo "Found WiX at: ${WIX_BIN}"
 
       - name: Stage payload
         shell: bash
@@ -304,9 +308,8 @@ jobs:
         shell: bash
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          WIX_PATH="C:/Program Files (x86)/WiX Toolset v3.11/bin"
-          "${WIX_PATH}/candle.exe" pkg/windows/log-explainer.wxs             -out pkg/windows/log-explainer.wixobj
-          "${WIX_PATH}/light.exe" pkg/windows/log-explainer.wixobj             -out pkg/windows/log-explainer-${VERSION}.msi
+          "${WIX_BIN}/candle.exe" pkg/windows/log-explainer.wxs             -out pkg/windows/log-explainer.wixobj
+          "${WIX_BIN}/light.exe" pkg/windows/log-explainer.wixobj             -out pkg/windows/log-explainer-${VERSION}.msi
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
