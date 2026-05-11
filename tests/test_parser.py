@@ -1,3 +1,5 @@
+import io
+import json
 import time
 from unittest.mock import patch, MagicMock
 from log_parser import classify_severity, PatternDetector, IncidentSummarizer, explain_log_line
@@ -59,7 +61,6 @@ class TestClassifySeverity:
 class TestPatternDetector:
     def test_no_alert_below_threshold(self):
         detector = PatternDetector(window_seconds=60, threshold=5)
-        # Check every iteration — none should fire before threshold
         for _ in range(4):
             result = detector.check("ERROR: DB connection failed at 12:00:01")
             assert result is None
@@ -72,8 +73,6 @@ class TestPatternDetector:
         assert result == 5
 
     def test_alert_fires_once(self):
-        # After the first alert the key is in self.alerted, so subsequent calls
-        # return None until count drops back below threshold and resets.
         detector = PatternDetector(window_seconds=60, threshold=3)
         alerts = []
         for _ in range(6):
@@ -102,24 +101,15 @@ class TestPatternDetector:
         assert result == 3
 
     def test_window_eviction_resets_alert(self):
-        # Entries older than window_seconds should be evicted, dropping count
-        # below threshold and clearing the alert so it can fire again.
         detector = PatternDetector(window_seconds=1, threshold=3)
-
-        # Fire the alert
         for _ in range(3):
             detector.check("ERROR: disk full")
-
-        # Wait for the window to expire
         time.sleep(1.1)
-
-        # Push count back up — should alert again after eviction
         results = []
         for _ in range(3):
             r = detector.check("ERROR: disk full")
             if r:
                 results.append(r)
-
         assert len(results) == 1
 
 
@@ -143,7 +133,7 @@ class TestIncidentSummarizer:
         for _ in range(3):
             s.record("ERROR: crash", "ERROR")
         assert s.should_summarize()
-        assert not s.should_summarize()  # second call within window_seconds should be blocked
+        assert not s.should_summarize()
 
     def test_ignores_non_errors(self):
         s = IncidentSummarizer(window_seconds=120, spike_threshold=3)
@@ -159,53 +149,84 @@ class TestIncidentSummarizer:
         assert "DB connection refused" in prompt
 
     def test_deques_stay_in_sync_after_eviction(self):
-        # After window expiry, error_times and error_lines must stay the same
-        # length — they are always evicted together.
         s = IncidentSummarizer(window_seconds=1, spike_threshold=99)
         for _ in range(5):
             s.record("ERROR: something", "ERROR")
-
         time.sleep(1.1)
-
-        # Trigger eviction by recording a new entry
         s.record("ERROR: new", "ERROR")
-
         assert len(s.error_times) == len(s.error_lines)
-        assert len(s.error_times) == 1  # only the new entry survives
+        assert len(s.error_times) == 1
 
 
 # ── Ollama integration (mocked) ───────────────────────────────────────────────
+# explain_log_line now streams and prints directly rather than returning a string.
+# Tests capture stdout and verify the printed output.
+
+def _make_stream_response(*tokens: str):
+    """Build a mock streaming response from a list of tokens."""
+    chunks = [
+        json.dumps({"message": {"content": t}, "done": False}).encode()
+        for t in tokens
+    ]
+    # Final chunk signals done
+    chunks.append(json.dumps({"message": {"content": ""}, "done": True}).encode())
+
+    mock_response = MagicMock()
+    mock_response.__enter__ = lambda s: s
+    mock_response.__exit__ = MagicMock(return_value=False)
+    mock_response.raise_for_status = MagicMock()
+    mock_response.iter_lines = MagicMock(return_value=iter(chunks))
+    return mock_response
+
 
 class TestExplainLogLine:
     @patch("log_parser.requests.post")
-    def test_returns_explanation(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": "The database connection was refused."}}
-        mock_response.raise_for_status = MagicMock()
-        mock_post.return_value = mock_response
-
-        result = explain_log_line("ERROR: Connection refused to postgres:5432", "qwen2.5-coder")
-        assert result == "The database connection was refused."
-
-    @patch("log_parser.requests.post", side_effect=Exception("Connection error"))
-    def test_handles_generic_exception(self, mock_post):
-        result = explain_log_line("ERROR: something", "qwen2.5-coder")
-        assert "[ERROR]" in result
+    def test_streams_explanation_to_stdout(self, mock_post, capsys):
+        mock_post.return_value = _make_stream_response("The ", "database ", "is down.")
+        explain_log_line("ERROR: Connection refused to postgres:5432", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert "The " in captured.out
+        assert "database " in captured.out
+        assert "is down." in captured.out
 
     @patch("log_parser.requests.post")
-    def test_handles_connection_error(self, mock_post):
+    def test_prints_arrow_prefix(self, mock_post, capsys):
+        mock_post.return_value = _make_stream_response("Something failed.")
+        explain_log_line("ERROR: something", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert "↳" in captured.out
+
+    @patch("log_parser.requests.post")
+    def test_returns_none(self, mock_post):
+        mock_post.return_value = _make_stream_response("ok")
+        result = explain_log_line("ERROR: something", "qwen2.5-coder")
+        assert result is None
+
+    @patch("log_parser.requests.post")
+    def test_handles_connection_error(self, mock_post, capsys):
         import requests as req
         mock_post.side_effect = req.exceptions.ConnectionError()
-        result = explain_log_line("ERROR: something", "qwen2.5-coder")
-        assert "ollama" in result.lower() or "[ERROR]" in result
+        explain_log_line("ERROR: something", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert "[ERROR]" in captured.out
 
     @patch("log_parser.requests.post")
-    def test_handles_timeout(self, mock_post):
+    def test_handles_timeout(self, mock_post, capsys):
         import requests as req
         mock_post.side_effect = req.exceptions.Timeout()
-        result = explain_log_line("ERROR: something", "qwen2.5-coder")
-        assert "timed out" in result.lower() or "[ERROR]" in result
+        explain_log_line("ERROR: something", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert "[ERROR]" in captured.out
+        assert "timed out" in captured.out.lower()
 
-    def test_empty_line_returns_empty(self):
-        result = explain_log_line("   ", "qwen2.5-coder")
-        assert result == ""
+    @patch("log_parser.requests.post")
+    def test_handles_generic_exception(self, mock_post, capsys):
+        mock_post.side_effect = Exception("unexpected failure")
+        explain_log_line("ERROR: something", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert "[ERROR]" in captured.out
+
+    def test_empty_line_prints_nothing(self, capsys):
+        explain_log_line("   ", "qwen2.5-coder")
+        captured = capsys.readouterr()
+        assert captured.out == ""
