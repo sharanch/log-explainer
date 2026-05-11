@@ -120,13 +120,19 @@ jobs:
             --define "_topdir $GITHUB_WORKSPACE/rpmbuild" \
             -bb $GITHUB_WORKSPACE/rpmbuild/SPECS/log-explainer.spec
 
+      - name: Stage Linux packages flat
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p dist-linux
+          cp pkg/deb/log-explainer_${VERSION}_all.deb dist-linux/
+          cp rpmbuild/RPMS/noarch/log-explainer-${VERSION}-1.noarch.rpm dist-linux/
+
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
         with:
           name: linux-packages
-          path: |
-            pkg/deb/log-explainer_${{ steps.version.outputs.VERSION }}_all.deb
-            rpmbuild/RPMS/noarch/log-explainer-${{ steps.version.outputs.VERSION }}-1.noarch.rpm
+          path: dist-linux/
+          if-no-files-found: error
 
   # ── macOS: .pkg ─────────────────────────────────────────────────────────────
   build-macos:
@@ -172,11 +178,18 @@ jobs:
             --package pkg/macos/log-explainer-component.pkg \
             pkg/macos/log-explainer-${VERSION}.pkg
 
+      - name: Stage macOS package flat
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p dist-macos
+          cp pkg/macos/log-explainer-${VERSION}.pkg dist-macos/
+
       - name: Upload macOS package
         uses: actions/upload-artifact@v4
         with:
           name: macos-package
-          path: pkg/macos/log-explainer-${{ steps.version.outputs.VERSION }}.pkg
+          path: dist-macos/
+          if-no-files-found: error
 
   # ── Release: attach all packages ────────────────────────────────────────────
   release:
@@ -195,6 +208,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist/
+
+      - name: Debug artifact structure
+        run: find dist/ -type f
 
       - name: Create release and upload packages
         uses: softprops/action-gh-release@v2
