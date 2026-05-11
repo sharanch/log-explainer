@@ -2,6 +2,7 @@
 
 import sys
 import time
+import json
 import argparse
 import requests
 import re
@@ -63,10 +64,11 @@ def classify_severity(line: str) -> str:
     return "UNKNOWN"
 
 
-def explain_log_line(line: str, model: str, context: str = "") -> str:
+def explain_log_line(line: str, model: str, context: str = "") -> None:
+    """Stream an explanation of a log line token by token from Ollama."""
     line = line.strip()
     if not line:
-        return ""
+        return
 
     context_clause = f" familiar with {context} applications" if context else ""
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(context_clause=context_clause)
@@ -75,21 +77,33 @@ def explain_log_line(line: str, model: str, context: str = "") -> str:
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Explain this application log line in plain English, Keep explanations concise — 1-2 sentences maximum. Focus on what it means and whether action is needed.:\n\n{line}"}
+            {"role": "user", "content": (
+                "Explain this application log line in plain English. "
+                "Keep it concise — 1-2 sentences maximum. "
+                "Focus on what it means and whether action is needed.:\n\n" + line
+            )},
         ],
-        "stream": False,
+        "stream": True,
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json().get("message", {}).get("content", "").strip()
+        print(f"  {DIM}↳{RESET} ", end="", flush=True)
+        with requests.post(OLLAMA_URL, json=payload, timeout=30, stream=True) as response:
+            response.raise_for_status()
+            for chunk in response.iter_lines():
+                if chunk:
+                    data = json.loads(chunk)
+                    token = data.get("message", {}).get("content", "")
+                    print(token, end="", flush=True)
+                    if data.get("done"):
+                        break
+        print()  # newline after stream ends
     except requests.exceptions.ConnectionError:
-        return "[ERROR] Cannot connect to Ollama. Is it running? Try: ollama serve"
+        print(f"[ERROR] Cannot connect to Ollama. Is it running? Try: ollama serve")
     except requests.exceptions.Timeout:
-        return "[ERROR] Ollama timed out. Model may still be loading."
+        print(f"[ERROR] Ollama timed out. Model may still be loading.")
     except Exception as e:
-        return f"[ERROR] {str(e)}"
+        print(f"[ERROR] {str(e)}")
 
 
 class PatternDetector:
@@ -185,7 +199,7 @@ def tail_file(filepath: str, model: str, context: str, min_severity: str):  # pr
     detector = PatternDetector(window_seconds=60, threshold=5)
     summarizer = IncidentSummarizer(window_seconds=120, spike_threshold=10)
 
-    print(f"\n{BOLD}🔍 Log Explainer{RESET} — SRE Incident Response Tool")
+    print(f"\n{BOLD}Log Explainer{RESET} — SRE Incident Response Tool")
     print(f"{DIM}File:     {filepath}{RESET}")
     print(f"{DIM}Model:    {model}{RESET}")
     print(f"{DIM}Filter:   {min_severity}+{RESET}")
@@ -238,17 +252,14 @@ def tail_file(filepath: str, model: str, context: str, min_severity: str):  # pr
                 if repeat_count:
                     print(f"  {SEVERITY_COLORS['WARN']}⚠ Pattern repeated {repeat_count}x in 60s — possible recurring issue{RESET}")
 
-                # Explain the line
-                explanation = explain_log_line(line, model, context)
-                if explanation:
-                    print(f"  {DIM}↳{RESET} {explanation}")
+                # Stream explanation token by token
+                explain_log_line(line, model, context)
 
                 # Incident summary on error spikes
                 if summarizer.should_summarize():
                     print()
-                    print(f"{SEVERITY_COLORS['CRITICAL']}{BOLD}🚨 INCIDENT SPIKE DETECTED — generating summary...{RESET}")
-                    summary = explain_log_line(summarizer.get_summary_prompt(), model, context)
-                    print(f"{BOLD}{summary}{RESET}")
+                    print(f"{SEVERITY_COLORS['CRITICAL']}{BOLD}INCIDENT SPIKE DETECTED — generating summary...{RESET}")
+                    explain_log_line(summarizer.get_summary_prompt(), model, context)
                     print_separator()
 
                 print()
