@@ -75,7 +75,7 @@ def explain_log_line(line: str, model: str, context: str = "") -> str:
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Explain this application log line in plain English:\n\n{line}"}
+            {"role": "user", "content": f"Explain this application log line in plain English, Keep explanations concise — 1-2 sentences maximum. Focus on what it means and whether action is needed.:\n\n{line}"}
         ],
         "stream": False,
     }
