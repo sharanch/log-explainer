@@ -11,6 +11,7 @@ from collections import deque
 
 import os
 
+
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
 DEFAULT_MODEL = "qwen2.5-coder:1.5b"
 
